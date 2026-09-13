@@ -21,8 +21,57 @@ class _AdminState extends State<Admin> {
   final Map<int, DateTime> _lockedUntil = {};
   Timer? _lockTimer;
 
+  Future<void> _stopSession(int courseId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    final sessionIdStr = prefs.getString('sessionId_course_$courseId');
 
-  @override
+    if (token == null || sessionIdStr == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active session found for this course.')),
+      );
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/v1/sessions/$sessionIdStr/stop'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session stopped.'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to stop session: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Network error while stopping session.')),
+      );
+    }
+  }
+
+
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jwt_token');
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+  }
+
+
+
+@override
   void initState() {
     super.initState();
     _fetchCourses();
@@ -229,6 +278,13 @@ class _AdminState extends State<Admin> {
     return Scaffold(
       appBar: AppBar(
         title: Text("Create Sessions"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _logout,
+          ),
+        ],
       ),
       body: Center(
         child:Column(
@@ -280,6 +336,11 @@ class _AdminState extends State<Admin> {
                             tooltip: 'Show saved OTP',
                             onPressed: () => _showSavedOtp(course),
                           ),
+                          IconButton(
+                            icon: const Icon(Icons.stop_circle, color: Colors.red),
+                            tooltip: 'Stop session',
+                            onPressed: () => _stopSession(courseId),
+                          ),  
                         ],
                       ),
                     ),
@@ -287,6 +348,8 @@ class _AdminState extends State<Admin> {
                 },
               ),
             ),
+
+
           ],
         ),
       ),

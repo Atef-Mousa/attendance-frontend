@@ -13,6 +13,32 @@ class _activate_student_state extends State<activate_student> {
   final TextEditingController _otpController = TextEditingController();
   Uri url = Uri.parse('$baseUrl/api/v1/attendance/submit');
 
+  Future<void> _logout() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/api/v1/settings/lock_status'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['login_locked'] == true) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You cannot log out while a session is active.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      // If the check itself fails (e.g. no internet), fall through and allow logout
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jwt_token');
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+  }
+
 
   String extractFastApiError(String responseBody) {
     try {
@@ -91,9 +117,16 @@ class _activate_student_state extends State<activate_student> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("OTP Verification "),
-      ),
+        appBar: AppBar(
+          title: Text("OTP Verification "),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Logout',
+              onPressed: _logout,
+            ),
+          ],
+        ),
       body :
         Center(
           child: Column(

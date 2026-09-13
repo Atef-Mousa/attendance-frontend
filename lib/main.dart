@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'create_course.dart';
 import 'route_guard.dart';
 import 'config.dart';
+import 'registration.dart';
 enum Role {student , teacher}
 void main() {
   runApp(const MyApp());
@@ -53,6 +54,8 @@ class MyApp extends StatelessWidget {
         '/activate_student': (context) => RouteGuard(requiredRole: 'student', child: activate_student()),
         '/activate_teacher': (context) => RouteGuard(requiredRole: 'instructor', child: Admin()),
         '/create_course': (context) => RouteGuard(requiredRole: 'instructor', child: CreateCourseScreen()),
+        '/register_student': (context) => RegisterStudent(),
+
       },
     );
   }
@@ -70,7 +73,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  Role _role = Role.student;
+
 
   final url = Uri.parse('$baseUrl/api/v1/login');
 
@@ -119,37 +122,49 @@ class _MyHomePageState extends State<MyHomePage> {
 
     }
 
-    try{
+    try {
       final response = await http.post(
-        url ,
-        headers: {'Content-Type': 'application/x-www-form-urlencoded',},
+        url,
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'username': email,
           'password': password,
         },
       );
+
+      if (response.statusCode == 403) {
+        final data = jsonDecode(response.body);
+        final message = data['detail'] ?? 'Login is currently locked.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+
       if (response.statusCode != 200) {
         throw Exception('Failed to login');
-
       }
+
       final Map<String, dynamic> data = jsonDecode(response.body);
       final accessToken = data['access_token'];
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('jwt_token', accessToken);
 
-
       final Map<String, dynamic> payload = parseJwtPayload(accessToken);
       final String? userRole = payload['role'];
-      if (userRole == 'student'){
+      if (!mounted) return;
+      if (userRole == 'student') {
         Navigator.pushNamed(context, '/activate_student');
+      } else {
+        Navigator.pushNamed(context, '/activate_teacher');
       }
-      else {
-        Navigator.pushNamed(context,'/activate_teacher');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: $e')),
+        );
       }
-
-    } catch(e){
-      print(e);
-    } finally{
+    } finally {
       print('done');
     }
   }
@@ -179,7 +194,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
 
             ),
-
+            SizedBox.fromSize(
+              size: Size(56, 12),
+            ),
             TextField(
               controller: _passwordController,
               decoration: InputDecoration(
@@ -188,27 +205,16 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               obscureText: true,
             ),
-            SegmentedButton<Role>(
-              segments: const <ButtonSegment<Role>>[
-                ButtonSegment<Role>(
-                  value: Role.student,
-                  label: Text('Student'),
-                ),
-                ButtonSegment<Role>(
-                  value: Role.teacher,
-                  label: Text('Teacher'),
+            SizedBox.fromSize(
+              size: Size(56, 12),
+            ),
 
-            ),
-                ],
-              selected:<Role>{_role},
-              onSelectionChanged: (Set<Role> newSelection) {
-                setState(() {
-                  _role = newSelection.first;
-                });
-              },
-            ),
             ElevatedButton(onPressed: _login,
-                child: Text("Sign In"))
+                child: Text("Sign In")),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/register_student'),
+              child: const Text("Don't have an account? Sign up"),
+            ),
 
           ],
         ),
