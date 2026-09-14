@@ -11,9 +11,6 @@ to mark themselves present in real time.
   last-known OTP per course)
 - **Deployment:** [Cloudflare Pages](https://pages.cloudflare.com)
 
-## Live Deployment
-- App URL: `https://your-project.pages.dev`
-- Depends on the backend API deployed separately (see `config.dart`).
 
 ## Project Structure
 ```
