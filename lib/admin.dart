@@ -340,7 +340,7 @@ class _AdminState extends State<Admin> {
                             icon: const Icon(Icons.stop_circle, color: Colors.red),
                             tooltip: 'Stop session',
                             onPressed: () => _stopSession(courseId),
-                          ),  
+                          ),
                         ],
                       ),
                     ),

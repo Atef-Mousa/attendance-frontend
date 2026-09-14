@@ -45,11 +45,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'attendance_project',
+      title: '',
       theme: ThemeData(
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(title: 'attendance_system'),
+      home: const MyHomePage(title: ''),
       routes: {
         '/activate_student': (context) => RouteGuard(requiredRole: 'student', child: activate_student()),
         '/activate_teacher': (context) => RouteGuard(requiredRole: 'instructor', child: Admin()),
