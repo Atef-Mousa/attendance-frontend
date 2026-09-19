@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
+import 'package:geolocator/geolocator.dart';
+
 
 
 class Admin extends StatefulWidget {
@@ -20,6 +22,54 @@ class _AdminState extends State<Admin> {
   bool _isLoading = true;
   final Map<int, DateTime> _lockedUntil = {};
   Timer? _lockTimer;
+
+
+  Future<Position?> _getCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location services are disabled.')),
+        );
+      }
+      return null;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permission denied.')),
+          );
+        }
+        return null;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission permanently denied. Enable it in browser settings.')),
+        );
+      }
+      return null;
+    }
+
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to get location: $e')),
+        );
+      }
+      return null;
+    }
+  }
 
   Future<void> _stopSession(int courseId) async {
     final prefs = await SharedPreferences.getInstance();
@@ -86,7 +136,12 @@ class _AdminState extends State<Admin> {
     super.dispose();
   }
 
-  Future<Map<String, dynamic>?> startSession(int courseId, {int ttlSeconds = 60}) async {
+  Future<Map<String, dynamic>?> startSession(
+      int courseId, {
+        int ttlSeconds = 60,
+        required double latitude,
+        required double longitude,
+      }) async {
     final prefs = await SharedPreferences.getInstance();
     final String? token = prefs.getString('jwt_token');
 
@@ -94,7 +149,6 @@ class _AdminState extends State<Admin> {
       print('[startSession]: No JWT token found in SharedPreferences.');
       return null;
     }
-    // Adjust host if running on emulator
 
     try {
       final response = await http.post(
@@ -106,10 +160,10 @@ class _AdminState extends State<Admin> {
         body: jsonEncode({
           'course_id': courseId,
           'ttl_seconds': ttlSeconds,
+          'latitude': latitude,
+          'longitude': longitude,
         }),
       ).timeout(const Duration(seconds: 10));
-
-
 
       print('[start_session]: ${response.statusCode} -> ${response.body}');
 
@@ -124,7 +178,6 @@ class _AdminState extends State<Admin> {
       return null;
     }
   }
-
 
   Future<void> _showSavedOtp(Map<String, dynamic> course) async {
     final dynamic rawId = course['id'] ?? course['course_id'];
@@ -173,35 +226,40 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> _startSession(Map<String, dynamic> course) async {
-    // 1. Show feedback that request is processing
+    final position = await _getCurrentLocation();
+    if (position == null) return; // error already shown to user
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Starting session for ${course['code']}...')),
     );
 
-    // 2. Safely parse course_id (handles string or int IDs from JSON)
     final dynamic rawId = course['id'] ?? course['course_id'];
     final int courseId = rawId is int ? rawId : int.parse(rawId.toString());
-    // 3. Call the API
-    final sessionData = await startSession(courseId, ttlSeconds: 60);
-    if (sessionData != null) {
-      final DateTime expiresAt = DateTime.parse(sessionData['expires_at']);
-      setState(() {
-        _lockedUntil[courseId] = expiresAt;
-      });
-    }
+
+    final sessionData = await startSession(
+      courseId,
+      ttlSeconds: 60,
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
 
     if (!mounted) return;
 
     if (sessionData != null) {
-      // Extract returned OTP/Session data (adjust keys based on your FastAPI schema)
       final String otpCode = sessionData['otp_code'] ?? sessionData['otp'] ?? 'N/A';
       final dynamic sessionId = sessionData['id'] ?? sessionData['session_id'];
+
+      // Save OTP locally so it can be viewed permanently later
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('otp_course_$courseId', otpCode);
       await prefs.setString('sessionId_course_$courseId', sessionId.toString());
 
+      // Lock the Start Session button until this session's expiry
+      final DateTime expiresAt = DateTime.parse(sessionData['expires_at']).toLocal();
+      setState(() {
+        _lockedUntil[courseId] = expiresAt;
+      });
 
-      // 4. Display the generated OTP to the instructor
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -241,7 +299,6 @@ class _AdminState extends State<Admin> {
       );
     }
   }
-
   bool _isLocked(int courseId) {
     final until = _lockedUntil[courseId];
     if (until == null) return false;

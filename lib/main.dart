@@ -48,6 +48,7 @@ class MyApp extends StatelessWidget {
       title: '',
       theme: ThemeData(
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        fontFamily: 'Cairo',
       ),
       home: const MyHomePage(title: ''),
       routes: {

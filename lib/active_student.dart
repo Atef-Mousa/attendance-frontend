@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' ;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
+import 'package:geolocator/geolocator.dart';
 
 class activate_student extends StatefulWidget {
   @override
@@ -12,6 +13,53 @@ class activate_student extends StatefulWidget {
 class _activate_student_state extends State<activate_student> {
   final TextEditingController _otpController = TextEditingController();
   Uri url = Uri.parse('$baseUrl/api/v1/attendance/submit');
+
+
+  Future<Position?> _getCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location services are disabled.')),
+        );
+      }
+      return null;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permission denied.')),
+          );
+        }
+        return null;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission permanently denied. Enable it in browser settings.')),
+        );
+      }
+      return null;
+    }
+
+    try {
+      return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to get location: $e')),
+        );
+      }
+      return null;
+    }
+  }
+
 
   Future<void> _logout() async {
     try {
@@ -60,7 +108,7 @@ class _activate_student_state extends State<activate_student> {
     return 'An unexpected error occurred. Please try again.';
   }
 
-  Future<void> _sendOtp() async{
+  Future<void> _sendOtp() async {
     final otp = _otpController.text.trim();
     if (otp.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -69,24 +117,35 @@ class _activate_student_state extends State<activate_student> {
           backgroundColor: Colors.orange,
         ),
       );
-      return; // Exit early without throwing a crashing exception
+      return;
     }
+
+    final position = await _getCurrentLocation();
+    if (position == null) return; // error already shown
+
     final prefs = await SharedPreferences.getInstance();
     final String? token = prefs.getString('jwt_token');
-    if (token == null){
+    if (token == null) {
       throw Exception('No token found');
     }
+
     try {
       final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": 'Bearer $token'},
-        body:jsonEncode({"otp_code": otp}),
+          "Authorization": 'Bearer $token'
+        },
+        body: jsonEncode({
+          "otp_code": otp,
+          "latitude": position.latitude,
+          "longitude": position.longitude,
+        }),
       );
 
+      if (!mounted) return;
 
-      if (response.statusCode != 200){
+      if (response.statusCode != 200) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(extractFastApiError(response.body)),
@@ -94,26 +153,19 @@ class _activate_student_state extends State<activate_student> {
             duration: const Duration(seconds: 3),
           ),
         );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Attendance successfully recorded"),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
-      else
-        {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Attendance successfully recorded"), // "Attendance successfully recorded"
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-
-    }catch(e){
-
-    }finally{
-
+    } catch (e) {
+      // consider showing an error here too
     }
-
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
