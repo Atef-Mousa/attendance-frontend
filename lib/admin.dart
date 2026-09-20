@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 
 
@@ -111,6 +112,49 @@ class _AdminState extends State<Admin> {
     }
   }
 
+  Future<void> _closeTaskSubmissions(int courseId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    final sessionIdStr = prefs.getString('sessionId_course_$courseId');
+
+    if (token == null || sessionIdStr == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No session found for this course. Start a session first.')),
+      );
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/v1/sessions/$sessionIdStr/close_task_submissions'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Task submissions closed for this session.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to close task submissions: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Network error while closing task submissions.')),
+      );
+    }
+  }
+
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
@@ -185,6 +229,7 @@ class _AdminState extends State<Admin> {
 
     final prefs = await SharedPreferences.getInstance();
     final String? otpCode = prefs.getString('otp_course_$courseId');
+    final String? sessionIdStr = prefs.getString('sessionId_course_$courseId');
 
     if (!mounted) return;
 
@@ -213,7 +258,185 @@ class _AdminState extends State<Admin> {
                 color: Colors.blue,
               ),
             ),
+            const SizedBox(height: 16),
+            Text('Session ID: ${sessionIdStr ?? 'N/A'}'),
           ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAttendance(Map<String, dynamic> course) async {
+    final dynamic rawId = course['id'] ?? course['course_id'];
+    final int courseId = rawId is int ? rawId : int.parse(rawId.toString());
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    final sessionIdStr = prefs.getString('sessionId_course_$courseId');
+
+    if (sessionIdStr == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No session found for this course. Start a session first.')),
+      );
+      return;
+    }
+
+    List<dynamic> records = [];
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/v1/sessions/$sessionIdStr/attendance'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        records = jsonDecode(response.body) as List<dynamic>;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load attendance: ${response.statusCode}')),
+        );
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Network error while loading attendance.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Attendance: ${course['code']} (Session $sessionIdStr)'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: records.isEmpty
+              ? const Text('No attendance recorded yet.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: records.length,
+                  itemBuilder: (context, index) {
+                    final record = records[index];
+                    final timestamp = record['timestamp'] as String?;
+                    return ListTile(
+                      leading: const Icon(Icons.check_circle, color: Colors.green),
+                      title: Text(record['student_name'] ?? 'Unknown'),
+                      subtitle: timestamp != null
+                          ? Text(DateTime.parse(timestamp).toLocal().toString())
+                          : null,
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openSubmissionLink(String link) async {
+    final uri = Uri.tryParse(link);
+    if (uri == null || !await launchUrl(uri, webOnlyWindowName: '_blank')) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open link: $link')),
+      );
+    }
+  }
+
+  Future<void> _showTaskSubmissions(Map<String, dynamic> course) async {
+    final dynamic rawId = course['id'] ?? course['course_id'];
+    final int courseId = rawId is int ? rawId : int.parse(rawId.toString());
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    final sessionIdStr = prefs.getString('sessionId_course_$courseId');
+
+    if (sessionIdStr == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No session found for this course. Start a session first.')),
+      );
+      return;
+    }
+
+    List<dynamic> submissions = [];
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/v1/sessions/$sessionIdStr/task_submissions'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        submissions = jsonDecode(response.body) as List<dynamic>;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load submissions: ${response.statusCode}')),
+        );
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Network error while loading submissions.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Task Submissions: ${course['code']}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: submissions.isEmpty
+              ? const Text('No submissions yet.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: submissions.length,
+                  itemBuilder: (context, index) {
+                    final sub = submissions[index];
+                    final link = sub['submission_link'] as String? ?? '';
+                    return ListTile(
+                      title: Text(sub['student_name'] ?? 'Unknown'),
+                      subtitle: InkWell(
+                        onTap: () => _openSubmissionLink(link),
+                        child: Text(
+                          link,
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
         ),
         actions: [
           TextButton(
@@ -392,6 +615,21 @@ class _AdminState extends State<Admin> {
                             icon: const Icon(Icons.visibility),
                             tooltip: 'Show saved OTP',
                             onPressed: () => _showSavedOtp(course),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.people),
+                            tooltip: 'View attendance',
+                            onPressed: () => _showAttendance(course),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.assignment_turned_in),
+                            tooltip: 'View task submissions',
+                            onPressed: () => _showTaskSubmissions(course),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.block, color: Colors.orange),
+                            tooltip: 'Close task submissions for this session',
+                            onPressed: () => _closeTaskSubmissions(courseId),
                           ),
                           IconButton(
                             icon: const Icon(Icons.stop_circle, color: Colors.red),
