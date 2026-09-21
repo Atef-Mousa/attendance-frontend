@@ -115,10 +115,10 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _login() async {
-    final email = _nameController.text;
+    final fullName = _nameController.text;
     final password = _passwordController.text;
-    if (email.isEmpty || password.isEmpty) {
-      throw Exception('Email and password cannot be empty');
+    if (fullName.isEmpty || password.isEmpty) {
+      throw Exception('Full name and password cannot be empty');
       return; // Stop execution here
 
     }
@@ -128,7 +128,7 @@ class _MyHomePageState extends State<MyHomePage> {
         url,
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
-          'username': email,
+          'username': fullName,
           'password': password,
         },
       );
@@ -189,7 +189,7 @@ class _MyHomePageState extends State<MyHomePage> {
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
-                hintText: 'email or name',
+                hintText: 'Full name',
                 border:OutlineInputBorder(),
               ),
 
