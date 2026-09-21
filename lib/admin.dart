@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'student_search.dart';
 
 
 
@@ -578,6 +579,17 @@ class _AdminState extends State<Admin> {
                 if (result == true) {
                   _fetchCourses();
                 }
+              },
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.search),
+              label: const Text('Search Student'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const StudentSearchScreen()),
+                );
               },
             ),
             const SizedBox(height: 20),
