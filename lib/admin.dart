@@ -10,7 +10,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'student_search.dart';
 
 
-
 class Admin extends StatefulWidget {
   @override
   State<StatefulWidget> createState() => _AdminState();
@@ -498,7 +497,7 @@ class _AdminState extends State<Admin> {
     );
   }
 
-  Future<void> _startSession(Map<String, dynamic> course) async {
+  Future<void>  _startSession(Map<String, dynamic> course,{int ttlSeconds = 60}) async {
     final position = await _getCurrentLocation();
     if (position == null) return; // error already shown to user
 
@@ -511,7 +510,7 @@ class _AdminState extends State<Admin> {
 
     final sessionData = await startSession(
       courseId,
-      ttlSeconds: 60,
+      ttlSeconds: ttlSeconds,
       latitude: position.latitude,
       longitude: position.longitude,
     );
@@ -668,7 +667,7 @@ class _AdminState extends State<Admin> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           ElevatedButton(
-                            onPressed: _isLocked(courseId) ? null : () => _startSession(course),
+                            onPressed: _isLocked(courseId) ? null : () => _startSession(course, ttlSeconds: ttlSeconds),
                             child: const Text('Start Session'),
                           ),
                           const SizedBox(width: 8),
