@@ -113,6 +113,55 @@ class _AdminState extends State<Admin> {
     }
   }
 
+  Future<void> _extendSession(int courseId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    final sessionIdStr = prefs.getString('sessionId_course_$courseId');
+
+    if (token == null || sessionIdStr == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active session found for this course.')),
+      );
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/v1/sessions/$sessionIdStr/extend'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final sessionData = jsonDecode(response.body) as Map<String, dynamic>;
+        final String otpCode = sessionData['otp_code'] ?? sessionData['otp'] ?? 'N/A';
+        final DateTime expiresAt = DateTime.parse(sessionData['expires_at']).toLocal();
+
+        await prefs.setString('otp_course_$courseId', otpCode);
+        setState(() {
+          _lockedUntil[courseId] = expiresAt;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Session extended. New OTP: $otpCode'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to extend session: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Network error while extending session.')),
+      );
+    }
+  }
+
   Future<void> _closeTaskSubmissions(int courseId) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token');
@@ -647,6 +696,11 @@ class _AdminState extends State<Admin> {
                             icon: const Icon(Icons.stop_circle, color: Colors.red),
                             tooltip: 'Stop session',
                             onPressed: () => _stopSession(courseId),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.timer, color: Colors.blue),
+                            tooltip: 'Extend session',
+                            onPressed: () => _extendSession(courseId),
                           ),
                         ],
                       ),
