@@ -373,23 +373,34 @@ class _AdminState extends State<Admin> {
         title: Text('Attendance: ${course['code']} (Session $sessionIdStr)'),
         content: SizedBox(
           width: double.maxFinite,
-          child: records.isEmpty
-              ? const Text('No attendance recorded yet.')
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: records.length,
-                  itemBuilder: (context, index) {
-                    final record = records[index];
-                    final timestamp = record['timestamp'] as String?;
-                    return ListTile(
-                      leading: const Icon(Icons.check_circle, color: Colors.green),
-                      title: Text(record['student_name'] ?? 'Unknown'),
-                      subtitle: timestamp != null
-                          ? Text(DateTime.parse(timestamp).toLocal().toString())
-                          : null,
-                    );
-                  },
-                ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${records.length} student${records.length == 1 ? '' : 's'} ${records.length == 1 ? 'has' : 'have'} submitted',
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              records.isEmpty
+                  ? const Text('No attendance recorded yet.')
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: records.length,
+                      itemBuilder: (context, index) {
+                        final record = records[index];
+                        final timestamp = record['timestamp'] as String?;
+                        return ListTile(
+                          leading: const Icon(Icons.check_circle, color: Colors.green),
+                          title: Text(record['student_name'] ?? 'Unknown'),
+                          subtitle: timestamp != null
+                              ? Text(DateTime.parse(timestamp).toLocal().toString())
+                              : null,
+                        );
+                      },
+                    ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
